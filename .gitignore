@@ -1,0 +1,5 @@
+*.egg-info
+scripts/*.jpg
+scripts/*.pth
+scripts/*.npz
+scripts/*.pt
