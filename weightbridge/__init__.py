@@ -1,2 +1,1 @@
-from .file import *
-from .matcher import match
+from .matcher import adapt

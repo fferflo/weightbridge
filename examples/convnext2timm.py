@@ -30,6 +30,7 @@ configs = [
     ("convnext_base.fb_in1k", "https://dl.fbaipublicfiles.com/convnext/convnext_base_1k_224_ema.pth", (288, 288)),
 ]
 
+print("                           Expected  class 178")
 for name, url, size in configs:
     print(f"Model: {name}")
 
@@ -62,10 +63,10 @@ for name, url, size in configs:
     if not os.path.isfile(file):
         print("Downloading original weights...")
         urllib.request.urlretrieve(url, file)
-    weights = weightbridge.load_pytorch(file)
+    weights = torch.load(file)
 
     # Load weights through weightbridge
-    weights = weightbridge.match(weights, model.state_dict())
+    weights = weightbridge.adapt(weights, model.state_dict())
     model.load_state_dict({k: torch.from_numpy(v) for k, v in weights.items()})
 
     # Apply with weightbridge pretrained weights

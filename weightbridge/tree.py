@@ -26,7 +26,7 @@ class Node:
     def is_predecessor_of(self, other):
         return id(other) == id(self) or (not other.parent is None and self.is_predecessor_of(other.parent))
 
-    def get_structured_shapes(self, use_product=True, ignore_shape_one=True, remove_trivial_nodes=False, flatten=False):
+    def get_structured_shapes(self, use_product=False, ignore_shape_one=False, remove_trivial_nodes=False, flatten=False):
         """Returns an object representing the shapes of weights in this node.
 
         The returned object is invariant to the ordering of children.

@@ -1,5 +1,5 @@
 *.egg-info
-scripts/*.jpg
-scripts/*.pth
-scripts/*.npz
-scripts/*.pt
+examples/*.jpg
+examples/*.pth
+examples/*.npz
+examples/*.pt

@@ -20,6 +20,7 @@ def match_by_paired_parents(state, match):
                 pairedparent_to_nodes[parent.full_prefix][1].append(n)
         return pairedparent_to_nodes
 
+    # Link every paired parent to nodes in the current match-group
     out_pairedparent_to_nodes = to_dict(match.out_nodes)
     in_pairedparent_to_nodes = to_dict(match.in_nodes)
 

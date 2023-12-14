@@ -7,6 +7,8 @@ def match_equivalent_hardcoded_leafs(state, match):
         ["bias", "offset", "beta", "b"],
         ["moving_mean", "running_mean", "~/mean_ema/average", "mean_ema/average", "mean/average"],
         ["moving_variance", "running_var", "~/var_ema/average", "var_ema/average", "var/average"],
+        ["key", "keys"],
+        ["query", "queries"],
     ]]
 
     out_nodes = [n for n in match.out_nodes if n.is_leaf()]

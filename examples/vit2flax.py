@@ -83,7 +83,7 @@ if not os.path.isfile(file):
     url = "https://github.com/EliSchwartz/imagenet-sample-images/blob/master/n02092339_Weimaraner.JPEG?raw=true"
     urllib.request.urlretrieve(url, file)
 image = imageio.v3.imread(file)
-print("Expected class: 178")
+print("                       Expected  class 178")
 
 # Preprocess color
 color_mean = np.asarray([0.5, 0.5, 0.5])
@@ -116,7 +116,7 @@ original_params["class_token"] = cls_token + pos_embed[:, :1, :]
 original_params["encoder.pos_embedding"] = pos_embed[:, 1:, :]
 
 # Map weights to our model implementation
-params["params"] = weightbridge.match(original_params, params["params"], in_format="pytorch", out_format="flax")
+params["params"] = weightbridge.adapt(original_params, params["params"], in_format="pytorch", out_format="flax")
 
 # Apply with pretrained weights
 output = model.apply(params, image[np.newaxis])[0]

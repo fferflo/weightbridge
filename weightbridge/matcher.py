@@ -1,10 +1,11 @@
 
 import numpy as np
-import time
+import time, types
 from collections import defaultdict
 from . import tree
 from .matchers.base import State, Match
 from . import matchers
+from functools import partial
 
 LOAD_PREFIX = "load_prefix"
 
@@ -19,63 +20,29 @@ def get_separator_for(names, type):
     else:
         raise ValueError(f"Could not implicitly determine separator in weight names. Please provide argument {type}.")
 
-format_map = {
-    "pytorch": "pytorch",
-    "tensorflow": "tensorflow",
-    "tf": "tensorflow",
-    "flax": "tensorflow",
-    "haiku": "tensorflow",
-}
 
-def adapt_format(value, out_shape, in_name, out_name, in_format, out_format):
-    if (in_format is None) != (out_format is None):
-        raise ValueError("Either both or neither of in_format and out_format must be specified")
-    if in_format is not None:
-        if not in_format in format_map:
-            raise ValueError(f"Format {in_format} not supported")
-        if not out_format in format_map:
-            raise ValueError(f"Format {out_format} not supported")
-        in_format = format_map[in_format]
-        out_format = format_map[out_format]
-        if in_format != out_format:
-            if in_format == "pytorch" and out_format == "tensorflow":
-                if (in_name.endswith(".weight") or in_name == "weight") and len(out_shape) >= 2 or (in_name.endswith(".in_proj_weight") and len(out_shape) == 2):
-                    perm = list(range(2, len(out_shape))) + [1, 0]
-                    perm_inv = [perm.index(i) for i in range(len(perm))]
-                    in_shape = [out_shape[i] for i in perm_inv]
 
-                    if value.shape != in_shape:
-                        value = np.reshape(value, in_shape)
-                    value = np.transpose(value, perm)
-                    assert value.shape == out_shape, f"{value.shape} != {out_shape}"
-            elif in_format == "tensorflow" and out_format == "pytorch":
-                print("weightbridge - warning: Tensorflow to PyTorch conversion is not tested") # TODO: test this
-                if (out_name.endswith(".weight") or out_name == "weight") and len(out_shape) >= 2 or (out_name.endswith(".in_proj_weight") and len(out_shape) == 2):
-                    perm = [len(out_shape) - 1, len(out_shape) - 2] + list(range(len(out_shape) - 2))
-                    perm_inv = [perm.index(i) for i in range(len(perm))]
-                    in_shape = [out_shape[i] for i in perm_inv]
-
-                    if value.shape != in_shape:
-                        value = np.reshape(value, in_shape)
-                    value = np.transpose(value, perm)
-                    assert value.shape == out_shape, f"{value.shape} != {out_shape}"
-            else:
-                raise ValueError(f"Conversion from {in_format} to {out_format} not supported")
-    
-    if value.shape != out_shape:
-        value = np.reshape(value, out_shape)
-    return value
-
-def match(in_values, out_values, in_format=None, out_format=None, in_separator=None, out_separator=None, hints=[], verbose=False):
+def adapt(in_values, out_values, in_format=None, out_format=None, in_separator=None, out_separator=None, hints=[], verbose=False):
     t0 = time.time()
     if isinstance(out_values, dict):
         single_input = True
         out_values = [out_values]
-    in_values = {k: np.asarray(v) for k, v in in_values.items()}
+    if isinstance(in_values, dict):
+        in_values = [in_values]
 
     # Get separator in input values
     if in_separator is None:
-        in_separator = get_separator_for(in_values.keys(), "in_separator")
+        keys = set()
+        def recurse(d):
+            if isinstance(d, dict):
+                for k, v in d.items():
+                    keys.add(k)
+                    recurse(v)
+        for d in in_values:
+            recurse(d)
+        in_separator = get_separator_for(keys, "in_separator")
+        if in_separator is None:
+            in_separator = possible_separators[0]
 
     # Get separator in output values
     if out_separator is None:
@@ -90,6 +57,23 @@ def match(in_values, out_values, in_format=None, out_format=None, in_separator=N
         out_separator = get_separator_for(keys, "out_separator")
         if out_separator is None:
             out_separator = possible_separators[0]
+
+    # Flatten input values
+    flat_in_values = {}
+    def recurse(source, key=()):
+        if isinstance(source, dict):
+            for k, v in source.items():
+                recurse(v, key + (k,))
+        else:
+            if len(key) == 0:
+                raise ValueError("Input values must be a dictionary")
+            name = in_separator.join(key)
+            if name in flat_in_values:
+                raise ValueError(f"Duplicate input name {name}")
+            flat_in_values[name] = np.asarray(source)
+    for d in in_values:
+        recurse(d)
+    in_values = flat_in_values
 
     # Flatten output values and remember tree structure
     flat_out_values = {}
@@ -120,6 +104,8 @@ def match(in_values, out_values, in_format=None, out_format=None, in_separator=N
         {LOAD_PREFIX + out_separator + k: v for k, v in out_values.items()},
         in_separator=in_separator,
         out_separator=out_separator,
+        in_format=in_format,
+        out_format=out_format,
         hints=hints,
         verbose=verbose,
     )
@@ -133,7 +119,7 @@ def match(in_values, out_values, in_format=None, out_format=None, in_separator=N
 
     # Construct heuristics
     ops = [
-        matchers.match_by_structured_shapes.match_by_structured_shapes,
+        partial(matchers.match_by_structured_shapes.match_by_structured_shapes, use_product=True),
         matchers.match_by_paired_parents.match_by_paired_parents,
         matchers.match_by_paired_children.match_by_paired_children,
         matchers.match_unique_leafs.match_unique_leafs,
@@ -141,26 +127,26 @@ def match(in_values, out_values, in_format=None, out_format=None, in_separator=N
         matchers.match_known_paired_number_regex.match_known_paired_number_regex,
         matchers.match_equivalent_hardcoded_leafs.match_equivalent_hardcoded_leafs,
         matchers.match_passed_hints.match_passed_hints,
-        matchers.match_subnames.match_subnames,
-        matchers.match_by_paired_predecessors.match_by_paired_predecessors,
         matchers.match_by_paired_prefixes.match_by_paired_prefixes,
+        matchers.match_by_paired_predecessors.match_by_paired_predecessors,
     ]
+    ops = {op.__name__ if not isinstance(op, partial) else op.func.__name__: op for op in ops}
 
     # Run matching heuristics
     times = defaultdict(lambda: 0.0)
     changed = True
     while changed:
         changed = False
-        for op in ops:
+        for name, op in ops.items():
             if verbose:
-                print(f"OP: Trying {op.__name__}")
+                print(f"OP: Trying {name}")
             start = time.time()
             matches, changed = op(state, matches)
 
-            times[op.__name__] += time.time() - start
+            times[name] += time.time() - start
             if changed:
                 if verbose:
-                    print(f"OP: Changed by {op.__name__}")
+                    print(f"OP: Changed by {name}")
                 break
 
     if verbose:
@@ -191,17 +177,15 @@ def match(in_values, out_values, in_format=None, out_format=None, in_separator=N
         if isinstance(x, dict):
             return {k: recurse(v) for k, v in x.items()}
         else:
-            out_name, shape, dtype = x
-            value = out_values_by_name[LOAD_PREFIX + out_separator + out_name].other.value
+            out_name, out_shape, dtype = x
+            in_value = out_values_by_name[LOAD_PREFIX + out_separator + out_name].other.value
             in_name = out_values_by_name[LOAD_PREFIX + out_separator + out_name].other.name
 
-            if value.dtype != dtype:
-                value = value.astype(dtype)
-            assert np.prod(value.shape) == np.prod(shape)
+            assert np.prod(in_value.shape) == np.prod(out_shape)
 
-            value = adapt_format(value, shape, in_name, out_name, in_format, out_format)
+            out_value = state.adapt_format(in_value, out_shape, in_name, out_name)
 
-            return value
+            return out_value
 
     out_values = [recurse(treedef) for treedef in out_treedefs]
 
