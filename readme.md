@@ -46,6 +46,12 @@ new_my_weights = weightbridge.adapt(their_weights, my_weights)
 The result is a tree of dicts that has the structure (including weight shapes) of `my_weights`, but with the weight values from `their_weights`. It can be used as drop-in for `my_weights`, and for
 example be stored back into the model using `model.load_state_dict` in PyTorch, or be used in `model.apply` in Flax and Haiku.
 
+**Installation:**
+
+```
+pip install weightbridge
+```
+
 **Full examples:**
 
 * [examples/gpt2haiku.py](https://github.com/fferflo/weightbridge/blob/master/examples/gpt2haiku.py): Download weights for [OpenAI GPT-2](https://huggingface.co/docs/transformers/v4.36.1/en/model_doc/gpt2) and load into custom Haiku implementation.
