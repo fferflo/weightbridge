@@ -3,9 +3,10 @@ import numpy as np
 import time, types
 from collections import defaultdict
 from . import tree
-from .matchers.base import State, Match
+from .matchers.base import Match
 from . import matchers
 from functools import partial
+from .state import State
 
 LOAD_PREFIX = "load_prefix"
 
@@ -119,7 +120,9 @@ def adapt(in_values, out_values, in_format=None, out_format=None, in_separator=N
 
     # Construct heuristics
     ops = [
-        partial(matchers.match_by_structured_shapes.match_by_structured_shapes, use_product=True),
+        partial(matchers.match_by_structured_shapes.match_by_structured_shapes, format="product"),
+        partial(matchers.match_by_structured_shapes.match_by_structured_shapes, format="as-input-shape"),
+        partial(matchers.match_by_structured_shapes.match_by_structured_shapes, format="as-output-shape"),
         matchers.match_by_paired_parents.match_by_paired_parents,
         matchers.match_by_paired_children.match_by_paired_children,
         matchers.match_unique_leafs.match_unique_leafs,
@@ -130,14 +133,20 @@ def adapt(in_values, out_values, in_format=None, out_format=None, in_separator=N
         matchers.match_by_paired_prefixes.match_by_paired_prefixes,
         matchers.match_by_paired_predecessors.match_by_paired_predecessors,
     ]
-    ops = {op.__name__ if not isinstance(op, partial) else op.func.__name__: op for op in ops}
+    def op_to_string(op):
+        if isinstance(op, partial):
+            args = [str(a) for a in op.args] + [f"{k}={v}" for k, v in op.keywords.items()]
+            return f"{op.func.__name__}({', '.join(args)})"
+        else:
+            return op.__name__
+    ops = [(op_to_string(op), op) for op in ops]
 
     # Run matching heuristics
     times = defaultdict(lambda: 0.0)
     changed = True
     while changed:
         changed = False
-        for name, op in ops.items():
+        for name, op in ops:
             if verbose:
                 print(f"OP: Trying {name}")
             start = time.time()
@@ -167,9 +176,9 @@ def adapt(in_values, out_values, in_format=None, out_format=None, in_separator=N
     if verbose:
         print()
         print("Paired values:")
-        mapping = {out_node.full_prefix: in_node.full_prefix for out_node, in_node in state.paired_nodes if out_node.is_leaf() and in_node.is_leaf()}
+        mapping = {out_node.full_prefix: in_node for out_node, in_node in state.paired_nodes if out_node.is_leaf() and in_node.is_leaf()}
         for out_value in state.out_values:
-            print(f"    {out_value.name} -> {mapping[out_value.name]}")
+            print(f"    {out_value.name} {out_value.shape} -> {mapping[out_value.name].full_prefix} {mapping[out_value.name].value.shape}")
 
     # Matching successful! Now build tree of output values
     out_values_by_name = {v.name: v for v in state.out_values}
@@ -183,11 +192,15 @@ def adapt(in_values, out_values, in_format=None, out_format=None, in_separator=N
 
             assert np.prod(in_value.shape) == np.prod(out_shape)
 
-            out_value = state.adapt_format(in_value, out_shape, in_name, out_name)
+            out_value = state.formatter.adapt_format(in_value, out_shape, in_name, out_name)
 
             return out_value
-
     out_values = [recurse(treedef) for treedef in out_treedefs]
+
+    # Check if any hints are unused
+    unused_hints = set(state.hints) - set(state.used_hints)
+    if len(unused_hints) > 0:
+        raise ValueError(f"Unused hints: {unused_hints}")
 
     if verbose:
         print(f"Matching took {time.time() - t0:.2f} seconds")

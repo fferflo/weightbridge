@@ -109,9 +109,9 @@ print(f"No pretrained weights: Predicted class {jnp.argmax(output, axis=0)}")
 # Download and load original weights
 original_params = torchvision.models.vit_b_16(weights="DEFAULT").state_dict()
 
-# The original ViT implementation includes an entry in the positional embedding that is added on the class token.
-# Our implementation adds the class token after positional embedding. We therefore have to add the first entry
-# of the original positional embedding onto our class token, and remove it from the positional embedding:
+# The original ViT implementation includes an entry in the positional embedding that is added onto the class token.
+# Our implementation appends the class token after positional embedding. We therefore have to add the first entry
+# of their positional embedding onto our class token, and remove it from their positional embedding:
 pos_embed = original_params["encoder.pos_embedding"]
 cls_token = original_params["class_token"]
 original_params["class_token"] = cls_token + pos_embed[:, :1, :]

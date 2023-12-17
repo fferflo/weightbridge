@@ -33,8 +33,6 @@ weightbridge does most of this work for you.
 
 ### How?
 
-Example usage:
-
 ```python
 import weightbridge
 new_my_weights = weightbridge.adapt(their_weights, my_weights)
@@ -42,8 +40,7 @@ new_my_weights = weightbridge.adapt(their_weights, my_weights)
 
 * `my_weights` contains the (random) untrained weights created at model initialization (e.g. as the result of `model.state_dict()` in PyTorch, or using `model.init` in Flax and Haiku).
 * `their_weights` contains the pretrained weights (e.g. as the result of `torch.load`, `tf.train.load_checkpoint` or `np.load`).
-
-The result is a tree of dicts that has the structure (including weight shapes) of `my_weights`, but with the weight values from `their_weights`. It can be used as drop-in for `my_weights`, and for
+* The output has the structure and weight shapes as `my_weights`, but with the weight values from `their_weights`. It can be used as drop-in for `my_weights`, and for
 example be stored back into the model using `model.load_state_dict` in PyTorch, or be used in `model.apply` in Flax and Haiku.
 
 **Installation:**
@@ -72,7 +69,7 @@ a custom Flax implementation. Test on an example image of ImageNet.
     IN  backbone.0.body.layer3.5.conv1.weight ((262144,),)
     IN  backbone.0.body.layer3.5.conv3.weight ((262144,),)
   ```
-  We can for example pass `hints=[("reduce", "conv1")]` (consisting of some uniquely identifying substrings) to resolve the matching failure.
+  We can pass `hints=[("reduce", "conv1")]` (consisting of some uniquely identifying substrings) to resolve the matching failure.
 * `verbose=True` to print the matching steps and the final mapping between weights.
 
 weightbridge internally uses a set of heuristics based on the weights' names and shapes to iteratively find mappings between subsets of `my_weights` and `their_weights`, until a unique pairing between all weights is found.
@@ -91,6 +88,6 @@ When the architecture is implemented using different operations, the weights hav
   k = nn.Linear(features=c)(x)
   v = nn.Linear(features=c)(x)
   ```
-  The corresponding weights have to be split/ concatenatted manually and will not be matched by weightbridge otherwise, since it relies on a one-to-one mapping between weights.
+  The corresponding weights have to be split/ concatenated manually and will not be matched by weightbridge otherwise, since it relies on a one-to-one mapping between weights.
 * **Hyperparameters:** weightbridge does not ensure that hyperparameters like `nn.LayerNorm(epsilon=1e-6)` or `nn.Conv(padding="SAME")` are set correctly (although some hyperparameters like `use_bias={True|False}` will raise an exception if not set correctly).
 * **Superfluous parameters:** weightbridge does not remove superfluous parameters like `num_batches_tracked` that might exist in one layer implementation, but not another (although it will raise an exception if such parameters are found).

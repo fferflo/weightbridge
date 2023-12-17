@@ -6,7 +6,7 @@ setup(
     name="weightbridge",
     version="0.0.1",
     python_requires=">=3",
-    description="Lightweight library to map model weights between different model implementations",
+    description="Library to map (deep learning) model weights between different model implementations.",
     author="Florian Fervers",
     author_email="florian.fervers@gmail.com",
     url="https://github.com/fferflo/weightbridge",

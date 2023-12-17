@@ -26,27 +26,34 @@ class Node:
     def is_predecessor_of(self, other):
         return id(other) == id(self) or (not other.parent is None and self.is_predecessor_of(other.parent))
 
-    def get_structured_shapes(self, use_product=False, ignore_shape_one=False, remove_trivial_nodes=False, flatten=False):
-        """Returns an object representing the shapes of weights in this node.
-
-        The returned object is invariant to the ordering of children.
-
-        Args:
-            use_product: Whether the object should be invariant to the specific shape of the weight and only represent the number of elements. Defaults to ``False``.
-            ignore_shape_one: Whether the object should be invariant to existence of axes of size 1. Defaults to ``True``.
-            remove_trivial_nodes: Whether the object should be invariant to the existence of intermediate nodes that have only a single child node. Defaults to ``False``.
-            flatten: Whether the object should be invariant to nesting of children. Defaults to ``False``.
-
-        Returns:
-            An id object representing the shapes of weights in this node.
-        """
+    def get_structured_shapes(self, format=None, ignore_shape_one=True, remove_trivial_nodes=False, flatten=False, is_input=None, state=None):
         if self.value is None:
             value_shape = []
         else:
-            if use_product:
-                value_shape = [(int(np.prod(self.value.shape)),)]
-            else:
-                value_shape = [tuple(s for s in self.value.shape if not ignore_shape_one or s != 1)]
+            if format is None:
+                value_shape = self.value.shape
+            elif format == "as-input-shape":
+                if is_input:
+                    value_shape = self.value.shape
+                else:
+                    value_shape = state.formatter.outshape_to_inshape(self.value.shape, self.full_prefix)
+            elif format == "as-output-shape":
+                if is_input:
+                    value_shape = state.formatter.inshape_to_outshape(self.value.shape, self.full_prefix)
+                else:
+                    value_shape = self.value.shape
+            elif format == "product":
+                value_shape = (int(np.prod(self.value.shape)),)
+
+            if value_shape is None:
+                return None
+
+            if ignore_shape_one:
+                value_shape = tuple(s for s in value_shape if s != 1)
+
+            value_shape = [value_shape]
+
+
         direct_children = self.direct_children
         if remove_trivial_nodes:
             def drop(n):
@@ -55,7 +62,16 @@ class Node:
                 else:
                     return n
             direct_children = [drop(c) for c in direct_children]
-        children_shapes = [c.get_structured_shapes(ignore_shape_one=ignore_shape_one, remove_trivial_nodes=remove_trivial_nodes, flatten=flatten) for c in direct_children]
+        children_shapes = [c.get_structured_shapes(
+            format=format,
+            ignore_shape_one=ignore_shape_one,
+            remove_trivial_nodes=remove_trivial_nodes,
+            flatten=flatten,
+            is_input=is_input,
+            state=state,
+        ) for c in direct_children]
+        if any(s is None for s in children_shapes):
+            return None
         if flatten:
             def flatten(shapes):
                 result = []
@@ -88,6 +104,7 @@ class Node:
             elif isinstance(shapes1, tuple) and isinstance(shapes2, int):
                 return -1
             else:
+                assert isinstance(shapes1, int) and isinstance(shapes2, int)
                 return compare_int(shapes1, shapes2)
         return tuple(sorted(value_shape + children_shapes, key=functools.cmp_to_key(compare)))
 

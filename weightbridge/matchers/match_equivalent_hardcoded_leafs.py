@@ -2,21 +2,21 @@ from .base import hint_matcher
 
 @hint_matcher
 def match_equivalent_hardcoded_leafs(state, match):
-    hints = [[
-        ["weight", "scale", "gamma", "w"],
-        ["bias", "offset", "beta", "b"],
-        ["moving_mean", "running_mean", "~/mean_ema/average", "mean_ema/average", "mean/average"],
-        ["moving_variance", "running_var", "~/var_ema/average", "var_ema/average", "var/average"],
-        ["key", "keys"],
-        ["query", "queries"],
-    ]]
+    hints = [
+        [
+            ["weight", "scale", "gamma", "w"],
+            ["bias", "offset", "beta", "b"],
+            ["moving_mean", "running_mean", "mean_ema/average", "mean/average", "mean"],
+            ["moving_variance", "moving_var", "running_variance", "running_var", "var_ema/average", "var/average", "var", "variance"],
+        ]
+    ]
 
     out_nodes = [n for n in match.out_nodes if n.is_leaf()]
     in_nodes = [n for n in match.in_nodes if n.is_leaf()]
 
     def get_index(node, separator, hint):
         for i, equivalent_postfixes in enumerate(hint):
-            if any(node.full_prefix.endswith(separator + postfix) for postfix in equivalent_postfixes):
+            if any((node.full_prefix.endswith(separator + postfix) or node.full_prefix == postfix) for postfix in equivalent_postfixes):
                 return i
         return -1
 

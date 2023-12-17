@@ -87,7 +87,7 @@ apply = jax.jit(model.apply)
 def predict(tokens, params, temperature=0.3):
     i = len(tokens)
     tokens = pad(tokens)
-    for _ in range(10): # Predict additional tokens
+    for _ in range(10): # Predict next tokens
         logits = apply(params, rng, tokens[np.newaxis])[0, i - 1]
         tokens[i] = jax.random.categorical(rng, logits / temperature)
         i += 1
@@ -102,7 +102,7 @@ pretrained_params["lm_head.weight"] = np.transpose(pretrained_params["lm_head.we
 pretrained_params = {k: v for k, v in pretrained_params.items() if not k.endswith(".attn.bias") and not k.endswith(".attn.masked_bias")}
 
 # Map weights to our model implementation
-params = weightbridge.adapt(pretrained_params, params, hints=[("norm_1", "ln_2"), ("vocab_embed", "wte")])
+params = weightbridge.adapt(pretrained_params, params, hints=[("norm_1", "ln_2")])
 
 # Apply with pretrained weights
 print(f"Weightbridge:          \"{predict(tokens, params)}\"")

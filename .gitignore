@@ -3,3 +3,4 @@ examples/*.jpg
 examples/*.pth
 examples/*.npz
 examples/*.pt
+dist/*

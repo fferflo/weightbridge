@@ -20,112 +20,6 @@ class Match:
             [n for n in self.out_nodes if n not in other.out_nodes],
         )
 
-format_map = {
-    "pytorch": "pytorch",
-    "tensorflow": "tensorflow",
-    "tf": "tensorflow",
-    "flax": "tensorflow",
-    "haiku": "tensorflow",
-    "jittor": "pytorch",
-}
-
-def can_reshape(in_shape, out_shape):
-    if tuple(s for s in in_shape if s != 1) == tuple(s for s in out_shape if s != 1):
-        return True
-    in_shape = tuple(s for s in in_shape if s != 1)
-    out_shape = tuple(s for s in out_shape if s != 1)
-    if len(in_shape) == len(out_shape):
-        return False
-    shorter_shape = in_shape if len(in_shape) < len(out_shape) else out_shape
-    longer_shape = in_shape if len(in_shape) > len(out_shape) else out_shape
-    while len(longer_shape) > 0:
-        if len(shorter_shape) == 0:
-            return False
-        elif longer_shape[0] == shorter_shape[0]:
-            longer_shape = longer_shape[1:]
-            shorter_shape = shorter_shape[1:]
-        else:
-            longer_shape = (longer_shape[0] * longer_shape[1],) + longer_shape[2:]
-    if len(shorter_shape) > 0:
-        return False
-    return True
-
-class State:
-    def __init__(self, in_values, out_values, in_separator, out_separator, in_format, out_format, hints=[], verbose=False):
-        if (in_format is None) != (out_format is None):
-            raise ValueError("Either both or neither of in_format and out_format must be specified")
-        if not in_format is None:
-            if not in_format in format_map:
-                raise ValueError(f"Format {in_format} not supported")
-            if not out_format in format_map:
-                raise ValueError(f"Format {out_format} not supported")
-            self.in_format = format_map[in_format]
-            self.out_format = format_map[out_format]
-        else:
-            self.in_format = self.out_format = None
-        self.in_separator = in_separator
-        self.out_separator = out_separator
-        self.verbose = verbose
-        self.hints = hints
-
-        self.in_values = [types.SimpleNamespace(
-                name=name,
-                value=in_value,
-                shape=tuple(in_value.shape),
-                other=None,
-            ) for name, in_value in in_values.items()]
-        self.out_values = [types.SimpleNamespace(
-                name=name,
-                shape=tuple(out_value.shape),
-                other=None,
-            ) for name, out_value in out_values.items()]
-
-        self.paired_nodes = []
-
-    def pair_node(self, in_node, out_node):
-        assert out_node.is_leaf() == in_node.is_leaf()
-        assert out_node.other is None and in_node.other is None
-
-        out_node.other = in_node
-        in_node.other = out_node
-
-        if out_node.is_leaf():
-            out_node.value.other = in_node.value
-            in_node.value.other = out_node.value
-
-        self.paired_nodes.append((out_node, in_node))
-
-    def get_format_permutation(self, out_shape, in_name, out_name):
-        if self.in_format is not None and self.in_format != self.out_format:
-            if self.in_format == "pytorch" and self.out_format == "tensorflow":
-                if (in_name.endswith(".weight") or in_name == "weight") and len(out_shape) >= 2 or (in_name.endswith(".in_proj_weight") and len(out_shape) == 2):
-                    return list(range(2, len(out_shape))) + [1, 0]
-            elif self.in_format == "tensorflow" and self.out_format == "pytorch":
-                print("weightbridge - warning: Tensorflow to PyTorch conversion is not tested") # TODO: test this
-                if (out_name.endswith(".weight") or out_name == "weight") and len(out_shape) >= 2 or (out_name.endswith(".in_proj_weight") and len(out_shape) == 2):
-                    return [len(out_shape) - 1, len(out_shape) - 2] + list(range(len(out_shape) - 2))
-            else:
-                raise ValueError(f"Conversion from {self.in_format} to {self.out_format} not supported")
-        return None
-
-    def adapt_format(self, value, out_shape, in_name, out_name):
-        perm = self.get_format_permutation(out_shape, in_name, out_name)
-        if not perm is None:
-            perm_inv = [perm.index(i) for i in range(len(perm))]
-            in_shape = [out_shape[i] for i in perm_inv]
-
-            if value.shape != in_shape:
-                assert can_reshape(value.shape, in_shape), f"Cannot reshape from {value.shape} to {in_shape} for {in_name} -> {out_name}"
-                value = np.reshape(value, in_shape)
-            value = np.transpose(value, perm)
-            assert value.shape == out_shape, f"{value.shape} != {out_shape}"
-
-        if value.shape != out_shape:
-            assert can_reshape(value.shape, out_shape), f"Cannot reshape from {value.shape} to {out_shape} for {in_name} -> {out_name}"
-            value = np.reshape(value, out_shape)
-
-        return value
-
 def matches_to_id(matches):
     return sorted(
         [(set(n.full_prefix for n in match.in_nodes), set(n.full_prefix for n in match.out_nodes)) for match in matches],
@@ -181,8 +75,8 @@ def matcher(func):
                 else: # Empty match
                     pass
 
-                if state.verbose and not match_out.description is None and (matches_to_id([match_in]) != matches_to_id(matches_out)):
-                    print(match_out.description)
+                if state.verbose and (matches_to_id([match_in]) != matches_to_id(matches_out)):
+                    print(match_out.description if not match_out.description is None else "Found match")
                     for n in match_out.out_nodes:
                         print(f"    OUT {n.full_prefix} {n.get_structured_shapes()}")
                     for n in match_out.in_nodes:
@@ -265,6 +159,9 @@ def hint_matcher(func):
                         remaining_in_nodes.remove(n)
                     yield Match(in_group, out_group, f"Found subgroup resulting from {hint_description(hint)}")
                 yield Match(remaining_in_nodes, remaining_out_nodes)
+
+                if func.__name__ == "match_passed_hints":
+                    state.used_hints.add(hint)
                 return
 
         yield match
