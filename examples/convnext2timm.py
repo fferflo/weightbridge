@@ -66,7 +66,7 @@ for name, url, size in configs:
     weights = torch.load(file)
 
     # Load weights through weightbridge
-    weights = weightbridge.adapt(weights, model.state_dict())
+    weights = weightbridge.adapt(weights, model.state_dict(), cache=f"convnext2timm-{name}")
     model.load_state_dict({k: torch.from_numpy(v) for k, v in weights.items()})
 
     # Apply with weightbridge pretrained weights

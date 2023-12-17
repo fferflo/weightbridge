@@ -118,7 +118,7 @@ original_params["class_token"] = cls_token + pos_embed[:, :1, :]
 original_params["encoder.pos_embedding"] = pos_embed[:, 1:, :]
 
 # Map weights to our model implementation
-params["params"] = weightbridge.adapt(original_params, params["params"], in_format="pytorch", out_format="flax")
+params["params"] = weightbridge.adapt(original_params, params["params"], in_format="pytorch", out_format="flax", cache="vit2flax")
 
 # Apply with pretrained weights
 output = model.apply(params, image[np.newaxis])[0]

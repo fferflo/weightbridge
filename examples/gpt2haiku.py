@@ -102,7 +102,7 @@ pretrained_params["lm_head.weight"] = np.transpose(pretrained_params["lm_head.we
 pretrained_params = {k: v for k, v in pretrained_params.items() if not k.endswith(".attn.bias") and not k.endswith(".attn.masked_bias")}
 
 # Map weights to our model implementation
-params = weightbridge.adapt(pretrained_params, params, hints=[("norm_1", "ln_2")])
+params = weightbridge.adapt(pretrained_params, params, hints=[("norm_1", "ln_2")], cache="gpt2haiku")
 
 # Apply with pretrained weights
 print(f"Weightbridge:          \"{predict(tokens, params)}\"")

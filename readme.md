@@ -11,6 +11,7 @@ Model weights trained using one implementation of an architecture typically cann
 * Different parameter and layer names.
 * Different nesting of modules.
 * Different parameter shapes (e.g. `(8, 8)` vs `(64)` vs `(1, 8, 8)`).
+* Different parameter permutations (e.g. `(64, 48)` vs `(48, 64)`).
 * Different deep learning frameworks (e.g. PyTorch, Tensorflow, Flax).
 
 Adapting the weights manually is a tedious and error-prone process:
@@ -40,8 +41,8 @@ new_my_weights = weightbridge.adapt(their_weights, my_weights)
 
 * `my_weights` contains the (random) untrained weights created at model initialization (e.g. as the result of `model.state_dict()` in PyTorch, or using `model.init` in Flax and Haiku).
 * `their_weights` contains the pretrained weights (e.g. as the result of `torch.load`, `tf.train.load_checkpoint` or `np.load`).
-* The output has the structure and weight shapes as `my_weights`, but with the weight values from `their_weights`. It can be used as drop-in for `my_weights`, and for
-example be stored back into the model using `model.load_state_dict` in PyTorch, or be used in `model.apply` in Flax and Haiku.
+
+The output has the same structure and weight shapes as `my_weights`, but with the weight values from `their_weights`. It can be used as drop-in for `my_weights`, and for example be stored back into the model using `model.load_state_dict` in PyTorch, or be used in `model.apply` in Flax and Haiku.
 
 **Installation:**
 
@@ -70,6 +71,8 @@ a custom Flax implementation. Test on an example image of ImageNet.
     IN  backbone.0.body.layer3.5.conv3.weight ((262144,),)
   ```
   We can pass `hints=[("reduce", "conv1")]` (consisting of some uniquely identifying substrings) to resolve the matching failure.
+* `cache="some-file"` to store the mapping in a file and reuse it in subsequent calls. If it is not an absolute path, the file is created in the directory of the
+  module from which `weightbridge.adapt` is called.
 * `verbose=True` to print the matching steps and the final mapping between weights.
 
 weightbridge internally uses a set of heuristics based on the weights' names and shapes to iteratively find mappings between subsets of `my_weights` and `their_weights`, until a unique pairing between all weights is found.
