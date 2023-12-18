@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="weightbridge",
-    version="0.0.1",
+    version="0.0.2",
     python_requires=">=3",
     description="Library to map (deep learning) model weights between different model implementations.",
     author="Florian Fervers",
