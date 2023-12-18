@@ -26,7 +26,7 @@ class Block(nn.Module):
         q = q * ((q.shape[-1] // self.heads) ** -0.5)
 
         attn = einx.dot("b q (h c), b k (h c) -> b q k h", q, k, h=self.heads)
-        attn = jax.nn.softmax(attn, axis=-2)
+        attn = einx.softmax("b q [k] h", attn)
         x = einx.dot("b q k h, b k (h c) -> b q (h c)", attn, v)
 
         x = Linear(channels=x.shape[-1])(x)
@@ -55,11 +55,11 @@ class VisionTransformer(nn.Module):
         # Patch embedding
         x = nn.Conv(features=self.channels, kernel_size=self.patchsize, strides=self.patchsize, padding=0)(x)
 
-        pos_embed = lambda shape: self.param("pos_embed", nn.initializers.normal(stddev=0.02), shape, "float32")
-        x = einx.add("b [s... c]", x, pos_embed)
+        # Positional embedding
+        x = einx.add("b [s... c]", x, einn.param(self, name="pos_embed", init=nn.initializers.normal(stddev=0.02)))
 
-        class_token = lambda shape: self.param("cls_token", nn.initializers.normal(stddev=0.02), shape, "float32")
-        x = einx.rearrange("b s... c, c -> b (1 + (s...)) c", x, class_token)
+        # Prepend class token
+        x = einx.rearrange("b s... c, c -> b (1 + (s...)) c", x, einn.param(self, name="cls_token"))
 
         # Blocks
         for _ in range(self.depth):
@@ -118,7 +118,7 @@ original_params["class_token"] = cls_token + pos_embed[:, :1, :]
 original_params["encoder.pos_embedding"] = pos_embed[:, 1:, :]
 
 # Map weights to our model implementation
-params["params"] = weightbridge.adapt(original_params, params["params"], in_format="pytorch", out_format="flax", cache="vit2flax")
+params = weightbridge.adapt(original_params, params, in_format="pytorch", out_format="flax", cache="vit2flax")
 
 # Apply with pretrained weights
 output = model.apply(params, image[np.newaxis])[0]

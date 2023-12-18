@@ -24,7 +24,7 @@ class Block(hk.Module):
         attn = einx.dot("b q (h c), b k (h c) -> b q k h", q, k, h=self.heads)
         mask = jnp.tril(jnp.ones((q.shape[1], q.shape[1]), dtype=bool)) # Causal mask
         attn = einx.where("q k, b q k h, ", mask, attn, -jnp.inf)
-        attn = jax.nn.softmax(attn, axis=-2)
+        attn = einx.softmax("b q [k] h", attn)
         x = einx.dot("b q k h, b k (h c) -> b q (h c)", attn, v)
 
         x = Linear(channels=x.shape[-1])(x)
@@ -50,11 +50,11 @@ class GPT2(hk.Module):
     block_size: int = 1024
 
     def __call__(self, x):
-        vocab_embed = hk.get_parameter("vocab_embed", (self.vocab_size, self.channels), "float32", hk.initializers.RandomNormal(stddev=0.02))
-        x = vocab_embed[x]
+        # Vocabulary embedding
+        x = einx.get_at("[v] c, b t -> b t c", einn.param(name="vocab_embed"), x, v=self.vocab_size, c=self.channels)
 
-        pos_embed = lambda shape: hk.get_parameter("pos_embed", shape, "float32", hk.initializers.RandomNormal(stddev=0.02))
-        x = einx.add("b [t c]", x, pos_embed)
+        # Positional embedding
+        x = einx.add("b [t c]", x, einn.param(name="pos_embed", init=hk.initializers.RandomNormal(stddev=0.02)))
 
         # Blocks
         for i in range(self.depth):
@@ -75,18 +75,17 @@ print(f"Input:                 \"{text}\"")
 # Encode text to tokens
 encoder = tiktoken.get_encoding("gpt2")
 tokens = np.asarray(encoder.encode_ordinary(text))
-def pad(tokens):
-    return np.pad(tokens, (0, GPT2.block_size - len(tokens)), constant_values=0)
+num_tokens = len(tokens)
+tokens = np.pad(tokens, (0, GPT2.block_size - num_tokens), constant_values=0)
 
 # Create model
 rng = jax.random.PRNGKey(int(time.time() * 1000))
 model = hk.transform(lambda x: GPT2()(x))
-params = model.init(rng, pad(tokens)[np.newaxis])
+params = model.init(rng, tokens[np.newaxis])
 apply = jax.jit(model.apply)
 
 def predict(tokens, params, temperature=0.3):
-    i = len(tokens)
-    tokens = pad(tokens)
+    i = num_tokens
     for _ in range(10): # Predict next tokens
         logits = apply(params, rng, tokens[np.newaxis])[0, i - 1]
         tokens[i] = jax.random.categorical(rng, logits / temperature)
