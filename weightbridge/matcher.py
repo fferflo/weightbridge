@@ -24,15 +24,47 @@ def get_separator_for(names, type):
 
 
 def _cache_key(x):
-    result = []
-    for k, v in x.items():
-        result.append([
-            k,
-            list(v.shape),
-        ])
-    return result
+    return [[k, list(v.shape)] for k, v in x.items()]
 
 def adapt(in_values, out_values, in_format=None, out_format=None, in_separator=None, out_separator=None, hints=[], cache=None, ignore_unmatched_inputs=False, ignore_unmatched_outputs=False, verbose=False):
+    """Adapt weights in ``in_values`` to match the signature of ``out_values``.
+
+    Args:
+        in_values: The weights that will be loaded. A dictionary from weight name to weight value (e.g. Numpy or Torch tensor). E.g.
+            result of ``torch.load(...)``.
+        out_values: The original (random) weights of the model into which weights will be loaded. A dictionary from weight name to weight
+            value (e.g. Numpy or Torch tensor). E.g. result of ``model.state_dict()``.
+        in_format: The format defining the order of dimensions in the input weights, e.g. ``"pytorch"`` or ``"tensorflow"``. If
+            ``None``, weights are not transposed. Defaults to ``None``.
+        out_format: The format defining the order of dimensions in the output weights, e.g. ``"pytorch"`` or ``"tensorflow"``. If
+            ``None``, weights are not transposed. Defaults to ``None``.
+        in_separator: A string separating different modules in the input weight names (e.g. ``"."`` or ``"/"``). If ``None``, the separator
+            is inferred from the input weight names. Defaults to ``None``.
+        out_separator: A string separating different modules in the output weight names (e.g. ``"."`` or ``"/"``). If ``None``, the
+            separator is inferred from the output weight names. Defaults to ``None``.
+        hints: A list of hints that can be used to resolve ambiguous matches between input and output weights. Each hint is a pair of
+            strings ``(out_name, in_name)`` where ``out_name`` and ``in_name`` are substrings of output and input weight names
+            that uniquely identify the pair as a match. For example, for a matching failure that is reported by weightbridge as
+            ```
+            Failed to pair the following nodes
+                OUT load_prefix/encode/stage3/block6/reduce/linear/w ((262144,),)
+                OUT load_prefix/encode/stage3/block6/expand/linear/w ((262144,),)
+                IN  backbone.0.body.layer3.5.conv1.weight ((262144,),)
+                IN  backbone.0.body.layer3.5.conv3.weight ((262144,),)
+            ```
+            we can pass ``hints=[("reduce", "conv1")]`` to resolve the ambiguity.
+        cache: A path to a cache file where successful matches will be stored and reloaded in subsequent calls. If it is not an absolute
+            path, it is interpreted as relative to the file that called ``adapt``. If ``None``, does not use cache. Defaults to ``None``.
+        ignore_unmatched_inputs: If ``True``, does not raise an error if some input weights are not matched to output weights. Defaults to
+            ``False``.
+        ignore_unmatched_outputs: If ``True``, does not raise an error if some output weights are not matched to input weights. Defaults to
+            ``False``.
+        verbose: If ``True``, prints information on the used matching steps and the final mapping. Defaults to ``False``.
+
+    Returns:
+        The adapted weights as a dictionary from weight name to weight value matching the signature of ``out_values``.
+    """
+    
     t0 = time.time()
     if isinstance(out_values, dict):
         single_input = True

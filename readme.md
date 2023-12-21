@@ -11,7 +11,7 @@ Model weights trained using one implementation of an architecture typically cann
 * Different parameter and layer names.
 * Different nesting of modules.
 * Different parameter shapes (e.g. `(8, 8)` vs `(64)` vs `(1, 8, 8)`).
-* Different parameter permutations (e.g. `(64, 48)` vs `(48, 64)`).
+* Different order of dimensions (e.g. `(64, 48)` vs `(48, 64)`).
 * Different deep learning frameworks (e.g. PyTorch, Tensorflow, Flax).
 
 Adapting the weights manually is a tedious and error-prone process:
@@ -93,4 +93,3 @@ When the architecture is implemented using different operations, the weights hav
   ```
   The corresponding weights have to be split/ concatenated manually and will not be matched by weightbridge otherwise, since it relies on a one-to-one mapping between weights.
 * **Hyperparameters:** weightbridge does not ensure that hyperparameters like `nn.LayerNorm(epsilon=1e-6)` or `nn.Conv(padding="SAME")` are set correctly (although some hyperparameters like `use_bias={True|False}` will raise an exception if not set correctly).
-* **Superfluous parameters:** weightbridge does not remove superfluous parameters like `num_batches_tracked` that might exist in one layer implementation, but not another (although it will raise an exception if such parameters are found).
