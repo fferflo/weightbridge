@@ -67,7 +67,7 @@ for name, url, size in configs:
 
     # Load weights through weightbridge
     weights = weightbridge.adapt(weights, model.state_dict(), cache=f"convnext2timm-{name}")
-    model.load_state_dict({k: torch.from_numpy(v) for k, v in weights.items()})
+    model.load_state_dict(weights)
 
     # Apply with weightbridge pretrained weights
     output = model(image2[np.newaxis])[0]

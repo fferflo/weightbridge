@@ -1,6 +1,6 @@
 
 import numpy as np
-import time, types, traceback, os, json
+import time, types, traceback, os, json, sys
 from collections import defaultdict
 from . import tree
 from .matchers.base import Match
@@ -32,7 +32,7 @@ def _cache_key(x):
         ])
     return result
 
-def adapt(in_values, out_values, in_format=None, out_format=None, in_separator=None, out_separator=None, hints=[], cache=None, verbose=False):
+def adapt(in_values, out_values, in_format=None, out_format=None, in_separator=None, out_separator=None, hints=[], cache=None, ignore_unmatched_inputs=False, ignore_unmatched_outputs=False, verbose=False):
     t0 = time.time()
     if isinstance(out_values, dict):
         single_input = True
@@ -99,28 +99,30 @@ def adapt(in_values, out_values, in_format=None, out_format=None, in_separator=N
             name = out_separator.join(key)
             if name in flat_out_values:
                 raise ValueError(f"Duplicate output name {name}")
-            source = types.SimpleNamespace(shape=tuple(source.shape), dtype=str(source.dtype))
             flat_out_values[name] = source
-            return (name, source.shape, source.dtype)
+            return (name, tuple(source.shape), str(source.dtype))
     out_treedefs = []
     for d in out_values:
         out_treedefs.append(recurse(d))
     out_values = flat_out_values
 
     state = State(
-        in_values,
+        {LOAD_PREFIX + in_separator + k: v for k, v in in_values.items()},
         {LOAD_PREFIX + out_separator + k: v for k, v in out_values.items()},
         in_separator=in_separator,
         out_separator=out_separator,
         in_format=in_format,
         out_format=out_format,
         hints=hints,
+        ignore_unmatched_inputs=ignore_unmatched_inputs,
+        ignore_unmatched_outputs=ignore_unmatched_outputs,
         verbose=verbose,
     )
 
     # Build module trees
     out_tree = tree.build(state.out_values)
     in_tree = tree.build(state.in_values)
+
     # Check if mapping is cached
     cache_miss = True
     if not cache is None:
@@ -238,12 +240,25 @@ def adapt(in_values, out_values, in_format=None, out_format=None, in_separator=N
         with open(cache, "w") as f:
             json.dump(data, f)
 
+    if len(state.paired_nodes) == 0:
+        raise ValueError("No weights were paired")
+
     if verbose:
         print()
         print("Paired values:")
         mapping = {out_node.full_prefix: in_node for out_node, in_node in state.paired_nodes if out_node.is_leaf() and in_node.is_leaf()}
         for out_value in state.out_values:
             print(f"    {out_value.name} {out_value.shape} -> {mapping[out_value.name].full_prefix} {mapping[out_value.name].value.shape}")
+        
+        unpaired_in_values = [in_value for in_value in state.in_values if in_value.other is None]
+        unpaired_out_values = [out_value for out_value in state.out_values if out_value.other is None]
+        if len(unpaired_in_values) > 0 or len(unpaired_out_values) > 0:
+            print()
+            print("Unpaired leafs:")
+            for out_value in unpaired_out_values:
+                print(f"    OUT {out_value.name} {out_value.shape}")
+            for in_value in unpaired_in_values:
+                print(f"    IN  {in_value.name} {in_value.shape}")
 
     # Create output dicts from stored tree structure
     out_values_by_name = {v.name: v for v in state.out_values}
@@ -252,12 +267,23 @@ def adapt(in_values, out_values, in_format=None, out_format=None, in_separator=N
             return {k: recurse(v) for k, v in x.items()}
         else:
             out_name, out_shape, dtype = x
-            in_value = out_values_by_name[LOAD_PREFIX + out_separator + out_name].other.value
-            in_name = out_values_by_name[LOAD_PREFIX + out_separator + out_name].other.name
+            out_value = out_values_by_name[LOAD_PREFIX + out_separator + out_name]
+            out_type = type(out_value.value)
+            if out_value.other is None:
+                assert state.ignore_unmatched_outputs
+                out_value = out_value.value
+            else:
+                in_value = out_value.other.value
+                in_name = out_value.other.name
 
-            assert np.prod(in_value.shape) == np.prod(out_shape)
+                assert np.prod(in_value.shape) == np.prod(out_shape)
 
-            out_value = state.formatter.adapt_format(in_value, out_shape, in_name, out_name)
+                out_value = state.formatter.adapt_format(in_value, out_shape, in_name, out_name)
+
+                if "torch" in sys.modules:
+                    import torch
+                    if out_type == torch.Tensor:
+                        out_value = torch.as_tensor(out_value)
 
             return out_value
     out_values = [recurse(treedef) for treedef in out_treedefs]

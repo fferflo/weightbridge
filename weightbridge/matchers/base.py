@@ -45,7 +45,8 @@ def matcher(func):
             i = 0
             while i < len(matches_out):
                 if len(matches_out[i].in_nodes) == 0 or len(matches_out[i].out_nodes) == 0:
-                    if not all(not n.is_leaf() for n in matches_out[i].in_nodes) or not all(not n.is_leaf() for n in matches_out[i].out_nodes):
+                    if         (not state.ignore_unmatched_inputs and not all(not n.is_leaf() for n in matches_out[i].in_nodes)) \
+                            or (not state.ignore_unmatched_outputs and not all(not n.is_leaf() for n in matches_out[i].out_nodes)):
                         def check(nodes, type):
                             if any(n.is_leaf() for n in nodes):
                                 print(f"Matcher {func.__name__} yielded unmatched leafs:")

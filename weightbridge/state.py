@@ -2,12 +2,14 @@ from . import format
 import types
 
 class State:
-    def __init__(self, in_values, out_values, in_separator, out_separator, in_format, out_format, hints=[], verbose=False):
+    def __init__(self, in_values, out_values, in_separator, out_separator, in_format, out_format, hints=[], ignore_unmatched_inputs=False, ignore_unmatched_outputs=False, verbose=False):
         self.formatter = format.Formatter(in_format, out_format, in_separator, out_separator)
         self.in_separator = in_separator
         self.out_separator = out_separator
         self.verbose = verbose
         self.hints = hints
+        self.ignore_unmatched_inputs = ignore_unmatched_inputs
+        self.ignore_unmatched_outputs = ignore_unmatched_outputs
         self.used_hints = set()
 
         self.in_values = [types.SimpleNamespace(
@@ -18,6 +20,7 @@ class State:
             ) for name, in_value in in_values.items()]
         self.out_values = [types.SimpleNamespace(
                 name=name,
+                value=out_value,
                 shape=tuple(out_value.shape),
                 other=None,
             ) for name, out_value in out_values.items()]
