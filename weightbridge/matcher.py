@@ -149,15 +149,20 @@ def adapt(in_values, out_values, in_format=None, out_format=None, in_separator=N
             with open(cache, "r") as f:
                 data = json.load(f)
             if not data is None and "key" in data and "mapping" in data and data["key"] == cache_key:
-                if verbose:
-                    print("Found cache file, and it matches the input data. Loading mapping.")
-                cache_miss = False
-
                 in_nodes = {node.full_prefix: node for node in in_tree}
                 out_nodes = {node.full_prefix: node for node in out_tree}
 
                 for out_name, in_name in data["mapping"]:
-                    state.pair_node(in_nodes[in_name], out_nodes[out_name])
+                    if not out_name in out_nodes or not in_name in in_nodes:
+                        if verbose:
+                            print("Found cache file, but it doesnot match the input data. Rerunning matching.")
+                        break
+                else:
+                    if verbose:
+                        print("Found cache file, and it matches the input data. Loading mapping.")
+                    cache_miss = False
+                    for out_name, in_name in data["mapping"]:
+                        state.pair_node(in_nodes[in_name], out_nodes[out_name])
             else:
                 if verbose:
                     print("Found cache file, but it doesnot match the input data. Rerunning matching.")
