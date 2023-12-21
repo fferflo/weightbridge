@@ -178,6 +178,7 @@ def adapt(in_values, out_values, in_format=None, out_format=None, in_separator=N
             matchers.match_by_paired_children.match_by_paired_children,
             matchers.match_unique_leafs.match_unique_leafs,
             matchers.match_number_regex.match_number_regex,
+            matchers.match_identical_names.match_identical_names,
             matchers.match_known_paired_number_regex.match_known_paired_number_regex,
             matchers.match_equivalent_hardcoded_leafs.match_equivalent_hardcoded_leafs,
             matchers.match_passed_hints.match_passed_hints,
