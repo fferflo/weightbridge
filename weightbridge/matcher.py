@@ -277,21 +277,21 @@ def adapt(in_values, out_values, in_format=None, out_format=None, in_separator=N
             out_type = type(out_value.value)
             if out_value.other is None:
                 assert state.ignore_unmatched_outputs
-                out_value = out_value.value
+                out_tensor = out_value.value
             else:
-                in_value = out_value.other.value
+                in_tensor = out_value.other.value
                 in_name = out_value.other.name
 
-                assert np.prod(in_value.shape) == np.prod(out_shape)
+                assert np.prod(in_tensor.shape) == np.prod(out_shape)
 
-                out_value = state.formatter.adapt_format(in_value, out_shape, in_name, out_name)
+                out_tensor = state.formatter.adapt_format(in_tensor, out_shape, in_name, out_name)
 
                 if "torch" in sys.modules:
                     import torch
                     if out_type == torch.Tensor:
-                        out_value = torch.as_tensor(out_value)
+                        out_tensor = torch.as_tensor(out_tensor)
 
-            return out_value
+            return out_tensor
     out_values = [recurse(treedef) for treedef in out_treedefs]
 
     if verbose:
