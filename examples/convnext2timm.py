@@ -25,6 +25,8 @@ image = image[:s, :s]
 
 
 
+
+
 configs = [
     ("convnextv2_base.fcmae_ft_in22k_in1k", "https://dl.fbaipublicfiles.com/convnext/convnextv2/im22k/convnextv2_base_22k_224_ema.pt", (224, 224)),
     ("convnext_base.fb_in1k", "https://dl.fbaipublicfiles.com/convnext/convnext_base_1k_224_ema.pth", (288, 288)),
@@ -54,7 +56,7 @@ for name, url, size in configs:
 
 
 
-    # Create model
+    # Create model without pretrained weights again (to ensure that above pretrained weights are not used below)
     model = timm.create_model(name, pretrained=False)
     model.eval()
 
@@ -65,7 +67,7 @@ for name, url, size in configs:
         urllib.request.urlretrieve(url, file)
     weights = torch.load(file)
 
-    # Load weights through weightbridge
+    # Load weights into model through weightbridge
     weights = weightbridge.adapt(weights, model.state_dict(), cache=f"convnext2timm-{name}")
     model.load_state_dict(weights)
 

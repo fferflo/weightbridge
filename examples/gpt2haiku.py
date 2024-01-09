@@ -5,7 +5,8 @@ import numpy as np
 from functools import partial
 import einx.nn.haiku as einn
 
-LayerNorm = partial(einn.Norm, "... [c]", epsilon=1e-5)
+# Use channels last layout
+Norm = partial(einn.Norm, "... [c]", epsilon=1e-5) # LayerNorm
 Linear = partial(einn.Linear, "... [_|channels]")
 
 class Block(hk.Module):
@@ -15,7 +16,7 @@ class Block(hk.Module):
     def __call__(self, x):
         # Attention block
         x0 = x
-        x = LayerNorm()(x)
+        x = Norm()(x)
 
         x = Linear(channels=3 * x.shape[-1])(x)
         q, k, v = jnp.split(x, 3, axis=-1)
@@ -33,7 +34,7 @@ class Block(hk.Module):
 
         # MLP block
         x0 = x
-        x = LayerNorm()(x)
+        x = Norm()(x)
 
         x = Linear(channels=x.shape[-1] * self.mlp_ratio)(x)
         x = jax.nn.gelu(x)
@@ -59,7 +60,7 @@ class GPT2(hk.Module):
         # Blocks
         for i in range(self.depth):
             x = Block(name=f"block{i}")(x)
-        x = LayerNorm()(x)
+        x = Norm()(x)
 
         # Classifier
         x = Linear(channels=self.vocab_size, bias=False)(x)
@@ -73,8 +74,8 @@ text = "We succeeded in taking that picture, and, if you look at it, you see a d
 print(f"Input:                 \"{text}\"")
 
 # Encode text to tokens
-encoder = tiktoken.get_encoding("gpt2")
-tokens = np.asarray(encoder.encode_ordinary(text))
+tokenizer = tiktoken.get_encoding("gpt2")
+tokens = np.asarray(tokenizer.encode_ordinary(text))
 num_tokens = len(tokens)
 tokens = np.pad(tokens, (0, GPT2.block_size - num_tokens), constant_values=0)
 
@@ -90,7 +91,7 @@ def predict(tokens, params, temperature=0.3):
         logits = apply(params, rng, tokens[np.newaxis])[0, i - 1]
         tokens[i] = jax.random.categorical(rng, logits / temperature)
         i += 1
-    return encoder.decode(tokens[:i])
+    return tokenizer.decode(tokens[:i])
 
 # Apply without pretrained weights
 print(f"No pretrained weights: \"{predict(tokens, params)}\"")

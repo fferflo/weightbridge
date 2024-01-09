@@ -8,7 +8,8 @@ import numpy as np
 from functools import partial
 import einx.nn.flax as einn
 
-LayerNorm = partial(einn.Norm, "... [c]", epsilon=1e-6)
+# Use channels last layout
+Norm = partial(einn.Norm, "... [c]", epsilon=1e-6) # LayerNorm
 Linear = partial(einn.Linear, "... [_|channels]")
 
 class Block(nn.Module):
@@ -19,7 +20,7 @@ class Block(nn.Module):
     def __call__(self, x):
         # Attention block
         x0 = x
-        x = LayerNorm()(x)
+        x = Norm()(x)
 
         x = Linear(channels=3 * x.shape[-1])(x)
         q, k, v = jnp.split(x, 3, axis=-1)
@@ -35,7 +36,7 @@ class Block(nn.Module):
 
         # MLP block
         x0 = x
-        x = LayerNorm()(x)
+        x = Norm()(x)
 
         x = Linear(channels=x.shape[-1] * self.mlp_ratio)(x)
         x = jax.nn.gelu(x)
@@ -64,7 +65,7 @@ class VisionTransformer(nn.Module):
         # Blocks
         for _ in range(self.depth):
             x = Block()(x)
-        x = LayerNorm()(x)
+        x = Norm()(x)
 
         # Classifier
         x = x[:, 0, :] # Class token
