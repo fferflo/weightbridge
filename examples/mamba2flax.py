@@ -1,19 +1,20 @@
 # See: https://github.com/johnma2006/mamba-minimal
 import jax.numpy as jnp
-import haiku as hk
+import flax.linen as nn
 import jax, einx, weightbridge, time, transformers, math, json, torch
 import numpy as np
 from functools import partial
-import einx.nn.haiku as einn
+import einx.nn.flax as einn
 
 # Use channels last layout
 Norm = partial(einn.Norm, "... [c]", epsilon=1e-5, mean=False, bias=False) # RMS Norm
 Linear = partial(einn.Linear, "... [_|channels]")
 
-class Block(hk.Module):
+class Block(nn.Module):
     kernel_size: int = 4
     d_state: int = 16
 
+    @nn.compact
     def __call__(self, x):
         x0 = x
         x = Norm()(x)
@@ -22,19 +23,19 @@ class Block(hk.Module):
         x, res = jnp.split(x, 2, axis=-1)
         res = jax.nn.silu(res)
 
-        x = hk.Conv1D(
-            x.shape[-1],
-            kernel_shape=self.kernel_size,
+        x = nn.Conv(
+            features=x.shape[-1],
+            kernel_size=(self.kernel_size,),
             feature_group_count=x.shape[-1],
-            padding=(self.kernel_size - 1, self.kernel_size - 1),
+            padding=[(self.kernel_size - 1, self.kernel_size - 1)],
         )(x)[:, :x.shape[1], :]
         x = jax.nn.silu(x) # b l c
 
 
         # Compute input-independent state space parameters
-        A = hk.get_parameter("A", shape=(x.shape[-1], self.d_state), init=jnp.zeros, dtype="float32")
+        A = self.param("A", nn.initializers.zeros_init(), (x.shape[-1], self.d_state), "float32")
         A = -jnp.exp(A) # c n
-        D = hk.get_parameter("D", shape=(x.shape[-1],), init=jnp.zeros, dtype="float32") # c
+        D = self.param("D", nn.initializers.zeros_init(), (x.shape[-1],), "float32") # c
 
         # Compute input-dependent state space parameters
         dt_rank = math.ceil(x0.shape[-1] / 16)
@@ -67,16 +68,15 @@ class Block(hk.Module):
 
         return x
 
-class Mamba(hk.Module):
-    def __init__(self, channels, depth, vocab_size=50280, name=None):
-        super().__init__(name=name)
-        self.channels = channels
-        self.depth = depth
-        self.vocab_size = vocab_size
+class Mamba(nn.Module):
+    channels: int
+    depth: int
+    vocab_size: int = 50280
 
+    @nn.compact
     def __call__(self, x):
         # Vocabulary embedding
-        x = einx.get_at("[v] c, b t -> b t c", hk.get_parameter, x, v=self.vocab_size, c=self.channels)
+        x = einx.get_at("[v] c, b t -> b t c", self.param, x, v=self.vocab_size, c=self.channels)
 
         # Blocks
         for i in range(self.depth):
@@ -125,14 +125,15 @@ tokens = np.pad(tokens, (0, block_size - num_tokens), constant_values=0)
 
 # Create model
 rng = jax.random.PRNGKey(int(time.time() * 1000))
-model = hk.transform(lambda x: Mamba(channels=config["d_model"], depth=config["n_layer"])(x))
-params = model.init(rng, tokens[np.newaxis])
+
+model = Mamba(channels=config["d_model"], depth=config["n_layer"])
+params = model.init({"params": rng}, tokens[np.newaxis])
 apply = jax.jit(model.apply)
 
 def predict(tokens, params, temperature=0.3):
     i = num_tokens
     for _ in range(10): # Predict next tokens
-        logits = apply(params, rng, tokens[np.newaxis])[0, i - 1]
+        logits = apply(params, tokens[np.newaxis])[0, i - 1]
         tokens[i] = jax.random.categorical(rng, logits / temperature)
         i += 1
     return tokenizer.decode(tokens[:i])
@@ -141,7 +142,7 @@ def predict(tokens, params, temperature=0.3):
 print(f"No pretrained weights: \"{predict(tokens, params)}\"")
 
 # Map weights to our model implementation
-params = weightbridge.adapt(pretrained_params, params, in_format="pytorch", out_format="haiku", cache="mamba2haiku")
+params = weightbridge.adapt(pretrained_params, params, in_format="pytorch", out_format="flax", cache="mamba2flax")
 
 # Apply with pretrained weights
 print(f"Weightbridge:          \"{predict(tokens, params)}\"")

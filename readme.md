@@ -52,6 +52,8 @@ pip install weightbridge
 
 **Full examples:**
 
+* [examples/mamba2flax.py](https://github.com/fferflo/weightbridge/blob/master/examples/mamba2flax.py): Download weights for [Mamba](https://huggingface.co/state-spaces/mamba-2.8b-slimpj) and load into custom Flax implementation.
+Print example text.
 * [examples/gpt2haiku.py](https://github.com/fferflo/weightbridge/blob/master/examples/gpt2haiku.py): Download weights for [OpenAI GPT-2](https://huggingface.co/docs/transformers/v4.36.1/en/model_doc/gpt2) and load into custom Haiku implementation.
 Print example text.
 * [examples/convnext2timm.py](https://github.com/fferflo/weightbridge/blob/master/examples/convnext2timm.py): Download original weights for [ConvNext](https://github.com/facebookresearch/ConvNeXt) and
