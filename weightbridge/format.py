@@ -120,7 +120,7 @@ class Formatter:
                     assert can_reshape(value.shape, in_shape), f"Cannot reshape from {value.shape} to {in_shape} for {in_name} -> {out_name}"
                     value = np.reshape(value, in_shape)
 
-                (value,), _ = einx.rearrange([expr_in], [value], [expr_out])
+                (value,), _ = einx.rearrange_stage3([expr_in], [value], [expr_out])
 
         if value.shape != out_shape:
             assert can_reshape(value.shape, out_shape), f"Cannot reshape from {value.shape} to {out_shape} for {in_name} -> {out_name}"
