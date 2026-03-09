@@ -1,5 +1,6 @@
-import einx
 import numpy as np
+import einx
+import types
 
 leaf_types = {
     "weight": "weight",
@@ -87,9 +88,8 @@ class Formatter:
 
         expr_in = self.in_format.expressions[leaf_type]
         expr_out = self.out_format.expressions[leaf_type]
-
-        (expr_out,), (expr_in,) = einx.rearrange.parse(f"{expr_out} -> {expr_in}", tuple(out_shape))
-        return expr_in.shape
+        shape_in, _ = einx.solve_shapes(f"{expr_in}, {expr_out}", None, types.SimpleNamespace(shape=out_shape))
+        return shape_in
 
     def inshape_to_outshape(self, in_shape, in_name):
         if self.in_format is None or len(in_shape) <= 1:
@@ -101,9 +101,8 @@ class Formatter:
 
         expr_in = self.in_format.expressions[leaf_type]
         expr_out = self.out_format.expressions[leaf_type]
-
-        (expr_in,), (expr_out,) = einx.rearrange.parse(f"{expr_in} -> {expr_out}", tuple(in_shape))
-        return expr_out.shape
+        _, shape_out = einx.solve_shapes(f"{expr_in}, {expr_out}", types.SimpleNamespace(shape=in_shape), None)
+        return shape_out
 
     def adapt_format(self, value, out_shape, in_name, out_name):
         if not self.in_format is None and len(out_shape) > 1:
@@ -112,15 +111,13 @@ class Formatter:
             if not leaf_type is None:
                 expr_in = self.in_format.expressions[leaf_type]
                 expr_out = self.out_format.expressions[leaf_type]
-
-                (expr_out,), (expr_in,) = einx.rearrange.parse(f"{expr_out} -> {expr_in}", tuple(out_shape))
-                in_shape = expr_in.shape
-
+                in_shape, _ = einx.solve_shapes(f"{expr_in}, {expr_out}", None, np.broadcast_to(0, out_shape))
                 if value.shape != in_shape:
                     assert can_reshape(value.shape, in_shape), f"Cannot reshape from {value.shape} to {in_shape} for {in_name} -> {out_name}"
                     value = np.reshape(value, in_shape)
 
-                (value,), _ = einx.rearrange_stage3([expr_in], [value], [expr_out])
+                parameters = einx.solve_axes(expr_out, types.SimpleNamespace(shape=out_shape))
+                value = einx.id(f"{expr_in} -> {expr_out}", value, **parameters)
 
         if value.shape != out_shape:
             assert can_reshape(value.shape, out_shape), f"Cannot reshape from {value.shape} to {out_shape} for {in_name} -> {out_name}"
