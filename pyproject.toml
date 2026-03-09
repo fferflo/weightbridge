@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "weightbridge"
+version = "0.0.4"
+requires-python = ">=3.10"
+authors = [
+    { name="Florian Fervers", email="florian.fervers@gmail.com" },
+]
+description = "Library to map (deep learning) model weights between different model implementations."
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+]
+license = "MIT"
+license-files = ["LICENSE"]
+readme = "README.md"
+
+dependencies = [
+    "numpy",
+    "einx>=0.4.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/fferflo/weightbridge"
+Source = "https://github.com/fferflo/weightbridge"
