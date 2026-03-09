@@ -6,11 +6,6 @@ from flax import linen as nn
 import jax, os, urllib.request, imageio, einx, weightbridge, cv2, math, torchvision
 import numpy as np
 from functools import partial
-import einx.nn.flax as einn
-
-# Use channels last layout
-Norm = partial(einn.Norm, "... [c]", epsilon=1e-6) # LayerNorm
-Linear = partial(einn.Linear, "... [_|channels]")
 
 class Block(nn.Module):
     heads: int = 12
@@ -20,27 +15,27 @@ class Block(nn.Module):
     def __call__(self, x):
         # Attention block
         x0 = x
-        x = Norm()(x)
+        x = nn.LayerNorm(epsilon=1e-6)(x)
 
-        x = Linear(channels=3 * x.shape[-1])(x)
+        x = nn.Dense(features=3 * x.shape[-1])(x)
         q, k, v = jnp.split(x, 3, axis=-1)
         q = q * ((q.shape[-1] // self.heads) ** -0.5)
 
-        attn = einx.dot("b q (h c), b k (h c) -> b q k h", q, k, h=self.heads)
+        attn = einx.dot("b q (h [c]), b k (h [c]) -> b q k h", q, k, h=self.heads)
         attn = einx.softmax("b q [k] h", attn)
-        x = einx.dot("b q k h, b k (h c) -> b q (h c)", attn, v)
+        x = einx.dot("b q [k] h, b [k] (h c) -> b q (h c)", attn, v)
 
-        x = Linear(channels=x.shape[-1])(x)
+        x = nn.Dense(features=x.shape[-1])(x)
 
         x = x + x0
 
         # MLP block
         x0 = x
-        x = Norm()(x)
+        x = nn.LayerNorm(epsilon=1e-6)(x)
 
-        x = Linear(channels=x.shape[-1] * self.mlp_ratio)(x)
+        x = nn.Dense(features=x.shape[-1] * self.mlp_ratio)(x)
         x = jax.nn.gelu(x)
-        x = Linear(channels=x0.shape[-1])(x)
+        x = nn.Dense(features=x0.shape[-1])(x)
 
         x = x + x0
 
@@ -57,19 +52,19 @@ class VisionTransformer(nn.Module):
         x = nn.Conv(features=self.channels, kernel_size=self.patchsize, strides=self.patchsize, padding=0)(x)
 
         # Positional embedding
-        x = einx.add("b [s... c]", x, einn.param(self, name="pos_embed", init=nn.initializers.normal(stddev=0.02)))
+        x = einx.add("b s... c, s... c", x, lambda shape: self.param("pos_embed", nn.initializers.normal(stddev=0.02), shape, "float32"))
 
         # Prepend class token
-        x = einx.rearrange("b s... c, c -> b (1 + (s...)) c", x, einn.param(self, name="cls_token"))
+        x = einx.id("c, b s... c -> b (1 + (s...)) c", lambda shape: self.param("cls_token", nn.initializers.normal(stddev=0.02), shape, "float32"), x)
 
         # Blocks
         for _ in range(self.depth):
             x = Block()(x)
-        x = Norm()(x)
+        x = nn.LayerNorm(epsilon=1e-6)(x)
 
         # Classifier
         x = x[:, 0, :] # Class token
-        x = Linear(channels=1000)(x)
+        x = nn.Dense(features=1000)(x)
 
         return x
 
@@ -120,7 +115,8 @@ original_params["encoder.pos_embedding"] = pos_embed[:, 1:, :]
 
 # Map weights to our model implementation
 params = weightbridge.adapt(original_params, params, in_format="pytorch", out_format="flax", cache="vit2flax")
+params = jax.tree.map(jnp.asarray, params)
 
 # Apply with pretrained weights
-output = model.apply(params, image[np.newaxis])[0]
+output = model.apply(params, jnp.asarray(image[np.newaxis]))[0]
 print(f"Weightbridge:          Predicted class {jnp.argmax(output, axis=0)}")

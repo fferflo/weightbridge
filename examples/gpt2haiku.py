@@ -3,11 +3,9 @@ import haiku as hk
 import jax, einx, weightbridge, tiktoken, time, transformers
 import numpy as np
 from functools import partial
-import einx.nn.haiku as einn
 
-# Use channels last layout
-Norm = partial(einn.Norm, "... [c]", epsilon=1e-5) # LayerNorm
-Linear = partial(einn.Linear, "... [_|channels]")
+Norm = lambda: hk.LayerNorm(axis=-1, create_scale=True, create_offset=True, eps=1e-5)
+Linear = lambda channels, **kwargs: hk.Linear(channels, **kwargs)
 
 class Block(hk.Module):
     heads: int = 25
@@ -22,11 +20,11 @@ class Block(hk.Module):
         q, k, v = jnp.split(x, 3, axis=-1)
         q = q * ((q.shape[-1] // self.heads) ** -0.5)
 
-        attn = einx.dot("b q (h c), b k (h c) -> b q k h", q, k, h=self.heads)
+        attn = einx.dot("b q (h [c]), b k (h [c]) -> b q k h", q, k, h=self.heads)
         mask = jnp.tril(jnp.ones((q.shape[1], q.shape[1]), dtype=bool)) # Causal mask
         attn = einx.where("q k, b q k h, ", mask, attn, -jnp.inf)
         attn = einx.softmax("b q [k] h", attn)
-        x = einx.dot("b q k h, b k (h c) -> b q (h c)", attn, v)
+        x = einx.dot("b q [k] h, b [k] (h c) -> b q (h c)", attn, v)
 
         x = Linear(channels=x.shape[-1])(x)
 
@@ -52,10 +50,12 @@ class GPT2(hk.Module):
 
     def __call__(self, x):
         # Vocabulary embedding
-        x = einx.get_at("[v] c, b t -> b t c", einn.param(name="vocab_embed"), x, v=self.vocab_size, c=self.channels)
+        vocab = lambda shape: hk.get_parameter(name="vocab_embed", shape=shape, init=hk.initializers.RandomNormal(stddev=0.02))
+        x = einx.get_at("[v] c, b t -> b t c", vocab, x, v=self.vocab_size, c=self.channels)
 
         # Positional embedding
-        x = einx.add("b [t c]", x, einn.param(name="pos_embed", init=hk.initializers.RandomNormal(stddev=0.02)))
+        pos_embed = lambda shape: hk.get_parameter(name="pos_embed", shape=shape, init=hk.initializers.RandomNormal(stddev=0.02))
+        x = einx.add("b t c, t c", x, pos_embed)
 
         # Blocks
         for i in range(self.depth):
@@ -63,7 +63,7 @@ class GPT2(hk.Module):
         x = Norm()(x)
 
         # Classifier
-        x = Linear(channels=self.vocab_size, bias=False)(x)
+        x = Linear(channels=self.vocab_size, with_bias=False)(x)
 
         return x
 
@@ -82,7 +82,7 @@ tokens = np.pad(tokens, (0, GPT2.block_size - num_tokens), constant_values=0)
 # Create model
 rng = jax.random.PRNGKey(int(time.time() * 1000))
 model = hk.transform(lambda x: GPT2()(x))
-params = model.init(rng, tokens[np.newaxis])
+params = model.init(rng, jnp.asarray(tokens[np.newaxis]))
 apply = jax.jit(model.apply)
 
 def predict(tokens, params, temperature=0.3):
